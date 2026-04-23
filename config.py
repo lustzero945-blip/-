@@ -1,0 +1,9 @@
+import os
+
+TOKEN = os.getenv("TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+XP_COURSE = 10
+XP_QUIZ_GOOD = 20
+XP_QUIZ_BAD = 5
+LEVEL_MULTIPLIER = 50
