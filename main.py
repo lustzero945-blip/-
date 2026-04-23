@@ -1,4 +1,6 @@
 import traceback
+import os
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
@@ -6,14 +8,21 @@ from telegram.ext import (
     MessageHandler, filters
 )
 
-from config import TOKEN, XP_COURSE, XP_QUIZ_GOOD, XP_QUIZ_BAD
 from database import get_user, add_xp, add_quiz_score, leaderboard, get_rank
 from ai import generate_course, generate_quiz, correct_code
+
+# ⚠️ TOKEN depuis Railway (PAS config.py)
+TOKEN = os.getenv("TOKEN")
 
 QUIZ_CACHE = {}
 
 START_IMG = "https://i.imgur.com/YhNXsI4.jpeg"
 CMD_IMG = "https://i.imgur.com/RbPhQnR.jpeg"
+
+XP_COURSE = 10
+XP_QUIZ_GOOD = 5
+XP_QUIZ_BAD = 1
+
 
 # ===== MENU =====
 def menu():
@@ -26,6 +35,7 @@ def menu():
         [InlineKeyboardButton("🏆 Leaderboard", callback_data="leader")]
     ])
 
+
 def level_menu(topic):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔰 Débutant", callback_data=f"{topic}_beginner")],
@@ -33,22 +43,18 @@ def level_menu(topic):
         [InlineKeyboardButton("🔙 Menu", callback_data="menu")]
     ])
 
+
 # ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_photo(
-        photo=START_IMG,
-        caption="""
-☠️━━━━━━━━━━━━━━━━━━━━☠️
-   FUTURE DEV SCHOOL
-☠️━━━━━━━━━━━━━━━━━━━━☠️
+    try:
+        await update.message.reply_photo(
+            photo=START_IMG,
+            caption="🚀 FUTURE DEV SCHOOL\n⚡ Powered by LUST DEV\n\nChoisis un langage :",
+            reply_markup=menu()
+        )
+    except Exception as e:
+        print("START ERROR:", e)
 
-⚡ Powered by LUST DEV
-🎓 Apprends. Code. Domine.
-
-Choisis un langage :
-""",
-        reply_markup=menu()
-    )
 
 # ===== HANDLE =====
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,26 +74,29 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=menu()
             )
 
-        # CHOIX NIVEAU
+        # NIVEAU
         elif data.endswith("_lvl"):
-            topic = data.replace("_lvl","")
+            topic = data.replace("_lvl", "")
             await query.message.reply_photo(
                 photo=CMD_IMG,
-                caption=f"Choisis niveau pour {topic.upper()} :",
+                caption=f"{topic.upper()} - Choisis niveau :",
                 reply_markup=level_menu(topic)
             )
 
         # COURS
         elif "_beginner" in data or "_advanced" in data:
             topic, level = data.split("_")
-            full = f"{topic} {level}"
 
-            course = await generate_course(full)
+            try:
+                course = await generate_course(f"{topic} {level}")
+            except:
+                course = "Erreur IA"
+
             add_xp(user_id, name, XP_COURSE)
 
             await query.message.reply_photo(
                 photo=CMD_IMG,
-                caption=f"📚 {full.upper()}\n\n{course[:3500]}",
+                caption=f"📚 {topic.upper()} {level}\n\n{course[:3000]}",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📝 Quiz", callback_data=f"quiz_{topic}")],
                     [InlineKeyboardButton("🔙 Menu", callback_data="menu")]
@@ -97,11 +106,14 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # QUIZ
         elif data.startswith("quiz_"):
             topic = data.split("_")[1]
-            quiz = await generate_quiz(topic)
 
-            lines = quiz.split("\n")
+            try:
+                quiz = await generate_quiz(topic)
+            except:
+                quiz = "Erreur quiz\nRéponse: A"
+
             correct = "A"
-            for l in lines:
+            for l in quiz.split("\n"):
                 if "Réponse" in l:
                     correct = l.split(":")[1].strip()
 
@@ -109,7 +121,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await query.message.reply_photo(
                 photo=CMD_IMG,
-                caption=quiz[:3500],
+                caption=quiz[:3000],
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("A", callback_data="answer_A"),
                      InlineKeyboardButton("B", callback_data="answer_B"),
@@ -117,15 +129,15 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ])
             )
 
-        # REPONSE QUIZ
+        # REPONSE
         elif data.startswith("answer_"):
             answer = data.split("_")[1]
-            correct = QUIZ_CACHE.get(user_id)
+            correct = QUIZ_CACHE.get(user_id, "A")
 
             if answer == correct:
                 add_xp(user_id, name, XP_QUIZ_GOOD)
                 add_quiz_score(user_id, 1)
-                text = "✅ Bonne réponse +XP"
+                text = "✅ Bonne réponse"
             else:
                 add_xp(user_id, name, XP_QUIZ_BAD)
                 text = f"❌ Mauvaise (correct: {correct})"
@@ -141,53 +153,50 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = get_user(user_id, name)
             rank = get_rank(user["level"])
 
-            await query.message.reply_photo(
-                photo=CMD_IMG,
-                caption=f"""
-👤 {name}
-Level: {user["level"]}
-XP: {user["xp"]}
-Rank: {rank}
-Quiz: {user["quiz_score"]}
-
-⚡ Powered by LUST DEV
-""",
-                reply_markup=menu()
+            await query.message.reply_text(
+                f"👤 {name}\nLevel: {user['level']}\nXP: {user['xp']}\nRank: {rank}"
             )
 
         # LEADERBOARD
         elif data == "leader":
             top = leaderboard()
 
-            text = "🏆 TOP DEVELOPERS\n\n"
+            text = "🏆 TOP\n"
             for i, u in enumerate(top, 1):
-                text += f"{i}. {u['name']} | Lv{u['level']}\n"
+                text += f"{i}. {u['name']} Lv{u['level']}\n"
 
-            await query.message.reply_photo(
-                photo=CMD_IMG,
-                caption=text,
-                reply_markup=menu()
-            )
+            await query.message.reply_text(text)
 
     except Exception as e:
-        print("ERREUR:", e)
+        print("HANDLE ERROR:", e)
         traceback.print_exc()
 
-# ===== IA CORRECTION =====
-async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    code = update.message.text
 
-    if len(code) > 10:
-        reply = await correct_code(code)
-        await update.message.reply_text(reply[:4000])
+# ===== CODE CHECK =====
+async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        code = update.message.text
+        if len(code) > 10:
+            reply = await correct_code(code)
+            await update.message.reply_text(reply[:3000])
+    except Exception as e:
+        print("CODE ERROR:", e)
+
 
 # ===== MAIN =====
-app = ApplicationBuilder().token(TOKEN).build()
+if __name__ == "__main__":
+    print("🚀 STARTING BOT...")
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(handle))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
+    if not TOKEN:
+        print("❌ TOKEN MANQUANT")
+        exit()
 
-print("🔥 BOT LUST DEV IMAGE MODE ONLINE")
+    app = ApplicationBuilder().token(TOKEN).build()
 
-app.run_polling()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
+
+    print("🔥 BOT LUST DEV ONLINE")
+
+    app.run_polling()
