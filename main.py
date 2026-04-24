@@ -12,7 +12,7 @@ from database import get_user, add_xp, add_quiz_score, leaderboard, get_rank
 from ai import generate_course, generate_quiz, correct_code
 
 # ⚠️ TOKEN depuis Railway (PAS config.py)
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("8576498710:AAF9LeBEVTjet9QQjGr8976Mr2IzOLzbBus")
 
 QUIZ_CACHE = {}
 
