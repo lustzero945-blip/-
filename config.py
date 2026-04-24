@@ -1,7 +1,7 @@
 import os
 
-TOKEN = os.getenv("TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TOKEN = os.getenv("8576498710:AAF9LeBEVTjet9QQjGr8976Mr2IzOLzbBus")
+OPENAI_API_KEY = os.getenv("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")
 
 XP_COURSE = 10
 XP_QUIZ_GOOD = 20
